@@ -35,8 +35,6 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     private static final BigInteger ONE_NULS     = BigInteger.valueOf(100000000L);
     private static final BigInteger BASIS_POINTS = BigInteger.valueOf(10000);
 
-    public Address depositCtr;
-    public Address treasury; // Address that will receive the project NULS
     public Address token; // Project Token
 
     public Boolean paused;
@@ -48,30 +46,29 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
     //User Balance
     public Map<Address, BigInteger> userBalance        = new HashMap<>();
-    public Map<Long, BigInteger>    oracle             = new HashMap<>();
-    public Map<Long, BigInteger>    oracleLastUpdated  = new HashMap<>();
+    public Map<Address, BigInteger> userStake          = new HashMap<>();
+    public Map<Integer, BigInteger> oracle             = new HashMap<>();
+    public Map<Integer, BigInteger> oracleLastUpdated  = new HashMap<>();
 
-    public Map<Long Map<Address, Boolean>> projectAdmin = new HashMap<>();
+    public Map<Integer, Map<Address, Boolean>> admins = new HashMap<>();
+    public Map<Integer, Map<Address, Boolean>> oracleFillers = new HashMap<>();
 
     //--------------------------------------------------------------------
     //Initialize Contract
     public NulsOracles(@Required BigInteger pricePerRead_,
-                     @Required BigInteger minNULSForFeeder_,
                      @Required BigInteger minNULSForFeeder_,
                      @Required Address token_,
                      @Required Address admin_
 
     ) {
 
-
-        treasury = treasury_;
-        projectAdmin.put(admin_, true);
+        admins.put(admin_, true);
         paused = false;
         minNULSForFeeder = minNULSForFeeder_;
         pricePerRead = pricePerRead_;
         token = token_;
 
-        oracleCounter;
+        oracleCounter = BigInteger.ZERO;
     }
 
     /** VIEW FUNCTIONS */
@@ -93,10 +90,13 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
      * @return true if it is admin, false if not
      */
     @View
-    public Boolean isAdmin(Address admin) {
-        if(projectAdmin.get(admin) == null)
+    public Boolean isAdmin(@Required int number,Address admin) {
+        if(projectAdmin.get(number) == null){
             return false;
-        return projectAdmin.get(admin);
+        }else if(projectAdmin.get(number).get(admin) == null){
+            return false;
+        }
+        return projectAdmin.get(number).get(admin);
     }
 
     /**
@@ -150,6 +150,8 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
     }
 
+
+
     @Payable
     public String readInfo(@Required BigInteger oracleNumber) {
 
@@ -158,6 +160,61 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         return (oracle.get(oracleNumber) != null) ?
                     oracle.get(oracleNumber).toString() + ",V1," + oracleLastUpdated.get(oracleNumber).toString()
                 :   BigInteger.ZERO.toString()          + ",V1," + oracleLastUpdated.get(oracleNumber).toString();
+
+    }
+
+    /**
+     * Deposit funds on Lock
+     *
+     * */
+    @Payable
+    public void depositOnBehalf() {
+
+        //Prevent Reentrancy Attacks
+        setEntrance();
+
+        //Only allow locks when not paused
+        notPaused();
+
+        BigInteger amount = Msg.value();
+
+        if(userBalance.get(Msg.sender()) == null){
+            userBalance.put(Msg.sender(), amount);
+        }else{
+            userBalance.put(Msg.sender(), userBalance.get(Msg.sender()).add(amount));
+        }
+
+
+        oracleLastUpdated.put(oracleNumber, BigInteger.valueOf(Block.timestamo()));
+
+        setClosure();
+
+    }
+
+    /**
+     * Deposit funds on Lock
+     *
+     * */
+    public void withdraw() {
+
+        //Prevent Reentrancy Attacks
+        setEntrance();
+
+        //Only allow locks when not paused
+        notPaused();
+
+        BigInteger amount = Msg.value();
+
+        if(userBalance.get(Msg.sender()) == null){
+            userBalance.put(Msg.sender(), amount);
+        }else{
+            userBalance.put(Msg.sender(), userBalance.get(Msg.sender()).add(amount));
+        }
+
+
+        oracleLastUpdated.put(oracleNumber, BigInteger.valueOf(Block.timestamo()));
+
+        setClosure();
 
     }
 
@@ -170,6 +227,13 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
         projectAdmin.put(newAdmin, true);
 
+    }
+
+    public void addOracleFiller(int oracle, Address newFiller){
+        Map<Address, Boolean> a = new HashMap<>();
+
+        a.put(admin_, true);
+        oracleFillers.put(oracle, a);
     }
 
     public void removeAdmin(Address removeAdmin){
