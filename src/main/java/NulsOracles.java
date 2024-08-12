@@ -40,21 +40,20 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
     public Boolean paused;
 
-
     public BigInteger minNULSForFeeder;
     public BigInteger minValids; // Min number of submissions required for filling info in oracle
     public BigInteger pricePerRead;
     public BigInteger priceForFeederValid;
     public Address treasury;
 
-    public Long oracleCounter;
+    public Integer oracleCounter;
 
     //User Balance
     public Map<Address, BigInteger> userBalance        = new HashMap<>(); // Amount deposited to check if can fill oracle needs
     public Map<Integer, BigInteger> oracle             = new HashMap<>(); // Oracle that stores price info
     public Map<Integer, BigInteger> challenger         = new HashMap<>(); // Challenger price to current
     public Map<Integer, BigInteger> challengerApprovs  = new HashMap<>(); // Challenger price to current
-    public Map<Integer, BigInteger> onlySeeders        = new HashMap<>(); // If true only seeders can submit
+    public Map<Integer, Boolean> onlySeeders        = new HashMap<>(); // If true only seeders can submit
     public Map<Integer, BigInteger> oracleLastUpdated  = new HashMap<>(); // When was the last oracle update
     public Map<Integer, BigInteger> validFeedinOracle  = new HashMap<>(); // number of approved feeders
     public Map<Address, BigInteger> minValidationsToSubmit       = new HashMap<>(); // Min Valids that a feeder must submit to info be considered reliable
@@ -145,6 +144,12 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
     public void enterNewOracle(){
 
+        onlySeeders.put(oracleCounter++, true);
+    }
+
+    public void openOracle(int oraclenumber){
+        require(admins.get(oraclenumber).get(Msg.sender()), "Not Oracle Admin");
+        onlySeeders.put(oraclenumber, false);
     }
 
     /** MUTABLE NON-OWNER FUNCTIONS */
@@ -163,6 +168,8 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         notPaused();
 
         require(userBalance.get(Msg.sender()).compareTo(minNULSForFeeder) >= 0, "NulsOracleV1: Min Nuls Required to Submit");
+
+        if(onlySeeders.get(oracleNumber))
 
         BigInteger userValids = minValidationsToSubmit.get(Msg.sender());
 
@@ -191,7 +198,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
                 BigInteger allow1perDeltaPos = newPrice.multiply(BASIS_POINTS).divide(10100);
                 BigInteger allow1perDeltaNeg = newPrice.multiply(BASIS_POINTS).divide(9900);
                 if(challenge.compareTo(allow1perDeltaPos) <=0 && challenge.compareTo(allow1perDeltaNeg) >=0){
-                    challengerApprovs.put()
+                    challengerApprovs.put(oracleNumber, challengerApprovs.get(oracleNumber).add(BigInteger.ONE));
                 }
             }
 
