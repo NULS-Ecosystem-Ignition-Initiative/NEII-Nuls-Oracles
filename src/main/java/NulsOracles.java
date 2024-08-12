@@ -33,32 +33,44 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
      *   @dev Min required to deposit in aiNULS is 100 NULS
      */
     private static final BigInteger ONE_NULS     = BigInteger.valueOf(100000000L);
+    private static final BigInteger FEE_NULS     = BigInteger.valueOf(10000000L);
     private static final BigInteger BASIS_POINTS = BigInteger.valueOf(10000);
 
     public Address token; // Project Token
 
     public Boolean paused;
 
+
     public BigInteger minNULSForFeeder;
+    public BigInteger minValids; // Min number of submissions required for filling info in oracle
     public BigInteger pricePerRead;
+    public BigInteger priceForFeederValid;
+    public Address treasury;
 
     public Long oracleCounter;
 
     //User Balance
-    public Map<Address, BigInteger> userBalance        = new HashMap<>();
-    public Map<Address, BigInteger> userStake          = new HashMap<>();
-    public Map<Integer, BigInteger> oracle             = new HashMap<>();
-    public Map<Integer, BigInteger> oracleLastUpdated  = new HashMap<>();
+    public Map<Address, BigInteger> userBalance        = new HashMap<>(); // Amount deposited to check if can fill oracle needs
+    public Map<Integer, BigInteger> oracle             = new HashMap<>(); // Oracle that stores price info
+    public Map<Integer, BigInteger> challenger         = new HashMap<>(); // Challenger price to current
+    public Map<Integer, BigInteger> challengerApprovs  = new HashMap<>(); // Challenger price to current
+    public Map<Integer, BigInteger> onlySeeders        = new HashMap<>(); // If true only seeders can submit
+    public Map<Integer, BigInteger> oracleLastUpdated  = new HashMap<>(); // When was the last oracle update
+    public Map<Integer, BigInteger> validFeedinOracle  = new HashMap<>(); // number of approved feeders
+    public Map<Address, BigInteger> minValidationsToSubmit       = new HashMap<>(); // Min Valids that a feeder must submit to info be considered reliable
 
     public Map<Integer, Map<Address, Boolean>> admins = new HashMap<>();
-    public Map<Integer, Map<Address, Boolean>> oracleFillers = new HashMap<>();
+    public Map<Integer, Map<Address, Boolean>> oracleSeedFillers = new HashMap<>();
 
     //--------------------------------------------------------------------
     //Initialize Contract
     public NulsOracles(@Required BigInteger pricePerRead_,
-                     @Required BigInteger minNULSForFeeder_,
-                     @Required Address token_,
-                     @Required Address admin_
+                       @Required BigInteger priceForFeederValid_,
+                       @Required BigInteger minNULSForFeeder_,
+                       @Required BigInteger minValids_,
+                       @Required Address token_,
+                       @Required Address admin_,
+                       @Required treasury_
 
     ) {
 
@@ -67,6 +79,9 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         minNULSForFeeder = minNULSForFeeder_;
         pricePerRead = pricePerRead_;
         token = token_;
+        minValids = minValids_;
+        priceForFeederValid = priceForFeederValid_;
+        treasury = treasury_;
 
         oracleCounter = BigInteger.ZERO;
     }
@@ -127,6 +142,11 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         require(!paused, "");
     }
 
+
+    public void enterNewOracle(){
+
+    }
+
     /** MUTABLE NON-OWNER FUNCTIONS */
 
     /**
@@ -134,7 +154,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
      *
      * */
     @Payable
-    public void submitOracleInfo(@Required BigInteger oracleNumber, BigInteger amount) {
+    public void submitOracleInfo(@Required BigInteger oracleNumber, BigInteger newPrice) {
 
         //Prevent Reentrancy Attacks
         setEntrance();
@@ -142,7 +162,42 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         //Only allow locks when not paused
         notPaused();
 
+        require(userBalance.get(Msg.sender()).compareTo(minNULSForFeeder) >= 0, "NulsOracleV1: Min Nuls Required to Submit");
 
+        BigInteger userValids = minValidationsToSubmit.get(Msg.sender());
+
+        if(userValids != null
+                && minValids.compareTo(userValids) <= 0){
+
+            safeTransferFrom(token, Msg.sender(), Msg.address(), priceForFeederValid);
+
+            require(Msg.value().compareTo(FEE_NULS)>= 0, "NulsOracleV1: Noobs Must Pay");
+
+            treasury.transfer(FEE_NULS);
+
+            minValidationsToSubmit.put(Msg.sender(),userValids.add(BigInteger.ONE));
+            if(minValids.compareTo(userValids) == 0 && validFeedinOracle.get(oracleNumber) != null)
+                validFeedinOracle.put(oracleNumber, validFeedinOracle.get(oracleNumber).add(BigInteger.ONE));
+        }else if(minValids.compareTo(userValids) > 0){
+            BigInteger price = oracle.get(oracleNumber);
+
+            BigInteger challenge = challenger.get(oracleNumber);
+
+            if(challenge == null){
+                challenger.put(oracleNumber, newPrice);
+                challengerApprovs.put(oracleNumber, BigInteger.ONE);
+            }else{
+                // see if it is between 1% and
+                BigInteger allow1perDeltaPos = newPrice.multiply(BASIS_POINTS).divide(10100);
+                BigInteger allow1perDeltaNeg = newPrice.multiply(BASIS_POINTS).divide(9900);
+                if(challenge.compareTo(allow1perDeltaPos) <=0 && challenge.compareTo(allow1perDeltaNeg) >=0){
+                    challengerApprovs.put()
+                }
+            }
+
+        }else{
+            minValidationsToSubmit.put(Msg.sender(), BigInteger.ONE);
+        }
 
         oracleLastUpdated.put(oracleNumber, BigInteger.valueOf(Block.timestamo()));
 
@@ -208,11 +263,8 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         if(userBalance.get(Msg.sender()) == null){
             userBalance.put(Msg.sender(), amount);
         }else{
-            userBalance.put(Msg.sender(), userBalance.get(Msg.sender()).add(amount));
+            userBalance.put(Msg.sender(), userBalance.get(Msg.sender()).subtract(amount));
         }
-
-
-        oracleLastUpdated.put(oracleNumber, BigInteger.valueOf(Block.timestamo()));
 
         setClosure();
 
@@ -278,6 +330,12 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         String[][] argsM = new String[][]{new String[]{recipient.toString()}, new String[]{amount.toString()}};
         boolean b = new Boolean(token.callWithReturnValue("transfer", "", argsM, BigInteger.ZERO));
         require(b, "NEII-V1: Failed to transfer");
+    }
+
+    private void safeTransferFrom(@Required Address token, @Required Address from, @Required Address recipient, @Required BigInteger amount){
+        String[][] args = new String[][]{new String[]{from.toString()}, new String[]{recipient.toString()}, new String[]{amount.toString()}};
+        boolean b = new Boolean(token.callWithReturnValue("transferFrom", "", args, BigInteger.ZERO));
+        require(b, "NulswapV1: Failed to transfer");
     }
 
 }
