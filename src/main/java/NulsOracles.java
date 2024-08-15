@@ -72,6 +72,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     private static final BigInteger BASIS_POINTS = BigInteger.valueOf(10000);
     private static final BigInteger ONE_HOUR     = BigInteger.valueOf(60 * 60);
     private static final BigInteger RAT_OUT_PAYOUT  = BigInteger.valueOf(500000000L);
+    private static final BigInteger INACTIVE_PAYOUT  = BigInteger.valueOf(10000000L);
 
     public Address token; // Project Token
 
@@ -105,6 +106,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
     public Map<Integer, Map<Address, Boolean>> admins = new HashMap<>();
     public Map<Integer, Map<Address, Boolean>> oracleSeedFillers = new HashMap<>();// check if is seed in oracle
+    public Map<Integer, Map<Address, Boolean>> oracleNormalFillers = new HashMap<>();// check if is seed in oracle
     public Map<Integer, Map<Address, Boolean>> currentSubmission = new HashMap<>(); //results of the challenge
 
     public int challengerCounter;
@@ -220,6 +222,17 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         onlySeeders.put(oraclenumber, false);
     }
 
+    public void alertInactive(int oracleNumber, Address inactiveUser){
+        Map<Address, Boolean> b = oracleNormalFillers.get(oracleNumber);
+        require(b.get(inactiveUser) != null && b.get(inactiveUser), "Not feeder");
+        require((lastUserSubmit.get(inactiveUser).add(TWO_DAYS)).compareTo(Block.timestramp()))
+
+        b.put(inactiveUser, false);
+        oracleNormalFillers.put(oracleNumber, b);
+        validFeedinOracle.put(oracleNumber, validFeedinOracle.get(oracleNumber) - 1);
+        Msg.sender().tranfer(INACTIVE_PAYOUT);
+    }
+
     public void ratOut(int oracleNumber, Address maliciousUser){
 
         setEntrance();
@@ -244,16 +257,19 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     /** MUTABLE NON-OWNER FUNCTIONS */
 
     @Payable
-    public void submitOracleInfo(@Required BigInteger oracleNumber, Boolean feedbackPrice) {
+    public void
 
-        require(oracleNumber < oracleCounter, "Impossible to feed the future");
+    @Payable
+    public void submitOracleInfo(@Required BigInteger oracleNumber, Boolean feedbackPrice) {
 
         //Only allow locks when not paused
         notPaused();
 
+        require(oracleNumber < oracleCounter, "Impossible to feed the future");
+
         require(userBalance.get(Msg.sender()).compareTo(minNULSForFeeder) >= 0, "NulsOracleV1: Min Nuls Required to Submit");
         require(yellowCard.get(Msg.sender()) <= 5, "Expelled from feeders");
-        require(onlySeeders.get(oracleNumber) || minValidationsToSubmit.get())
+        require(onlySeeders.get(oracleNumber) || minValidationsToSubmit.get(oracleNumber) > minValids), "";
         require(challenger.get(oracleNumber) != null, "Challenge not created");
 
         if(onlySeeders.get(oracleNumber)){
@@ -288,11 +304,14 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         // Check to prevent withdraws until 2 daus after price submit
             lastUserSubmit.put(Msg.sender(), Block.timestamp());
 
-        Map<Address, Boolean>> c;
-        c.put(Msg.sender(), feedbackPrice);
+            Map<Address, Boolean>> c;
+            c.put(Msg.sender(), feedbackPrice);
+            currentSubmission.put(oracleNumber, c);
 
-                currentSubmission.put(oracleNumber, c);
+
     }
+
+
 
     private void increaseUserYellowCards(BigInteger oracleNumber){
             Address user = challengerOwner.get(oracleNumber);
