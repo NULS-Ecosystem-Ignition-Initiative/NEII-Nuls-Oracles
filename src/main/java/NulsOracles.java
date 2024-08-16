@@ -64,6 +64,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     private static final BigInteger RAT_OUT_PAYOUT  = BigInteger.valueOf(500000000L); // 5 NULS
     private static final BigInteger INACTIVE_PAYOUT = BigInteger.valueOf(10000000L);  // 0.1 NULS
     private static final BigInteger TWO_DAYS        = BigInteger.valueOf(60 * 60 * 24 * 2); // 2 days
+    private static final int TWO_DAYS_LONG        = 60 * 60 * 24 * 2; // 2 days
     private static final long FIVE_DAYS       = 60 * 60 * 24 * 5; // 5 days
 
     public Address token; // Project Token
@@ -235,7 +236,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
         require(pendingNewFeeders < validFeedinOracle / 2, "Only allow less than half of approved for every cicle");
         require(Msg.value().compareTo(RAT_OUT_PAYOUT.multiply(FIVE)) >= 0, "Pay for payouts");
-        firstSubmissionToOracle.put(Msg.sender(), BigInteger.valueOf(Block.timestamp()));
+        firstSubmissionToOracle.put(Msg.sender(), Block.timestamp());
         pendingNewFeeders += 1;
 
     }
@@ -243,7 +244,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     public void completeProcess(int seedersNumber){
 
         require(firstSubmissionToOracle.get(Msg.sender()) != null, "Process is null");
-        require((firstSubmissionToOracle.get(Msg.sender()).add(TWO_DAYS)).compareTo(Big>Integer.valueOf(Block.timestamp())) < 0, "Two days waiting period");
+        require((firstSubmissionToOracle.get(Msg.sender()) + TWO_DAYS_LONG) < Block.timestamp() , "Two days waiting period");
 
         //Prevent double submissions
         firstSubmissionToOracle.put(Msg.sender(), null);
@@ -383,7 +384,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         // Check to prevent withdraws until 2 daus after price submit
         lastUserSubmit.put(Msg.sender(), Block.timestamp());
 
-        Map<Address, Boolean> c;
+        Map<Address, Boolean> c = currentSubmission.get(Msg.sender());
         c.put(Msg.sender(), feedbackPrice);
         currentSubmission.put(challengerCounter, c);
 
