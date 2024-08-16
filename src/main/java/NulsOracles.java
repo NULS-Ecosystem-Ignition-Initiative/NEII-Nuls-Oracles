@@ -17,46 +17,6 @@ import reentrancyguard.ReentrancyGuard;
 import static io.nuls.contract.sdk.Utils.emit;
 import static io.nuls.contract.sdk.Utils.require;
 
-public class Challenge(){
-
-    public BigInteger challenger ;         // Challenger price to current
-    public Address challengerOwner       // Challenger price to current
-    public Integer challengerApprovs       // Challenger price to current
-    public Integer challengerRejects     // Challenger price to current
-
-    public Challenge(){
-
-    }
-}
-
-public class Oracle{
-
-    public BigInteger oracle;         // Oracle that stores price info
-    public BigInteger challenger ;         // Challenger price to current
-    public Address challengerOwner       // Challenger price to current
-    public Integer challengerApprovs       // Challenger price to current
-    public Integer challengerRejects     // Challenger price to current
-    public Booelan onlySeeders            // If true only seeders can submit
-    public BigInteger oracleLastUpdated   // When was the last oracle update
-    public Integer validFeedinOracle   // number of approved feeders
-
-    public Map<Address, Boolean> admins = new HashMap<>();
-    public Map<Address, Boolean> oracleSeedFillers = new HashMap<>();// check if is seed in oracle
-    public Map<Address, Integer> currentSubmission = new HashMap<>(); //
-
-
-
-    public Oracle(BigInteger oracle,
-                  BigInteger challenger,
-                  Address challengerOwner,
-                  ){
-        this.oracle = oracle;
-        this.challenger = challenger;
-        this.challengerOwner
-
-    }
-}
-
 /**
 * @notice Nuls Contract that locks the nuls deposited, returns
 * yield to a project during an x period of time and
@@ -227,7 +187,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     }
 
     protected void onlyIfValidYellowCards(Address feeder){
-        require(yellowCard.get(feeder) <= 5, "Expelled from feeders");
+        require(yellowCard.get(feeder) <= 5, "NulsOraclesV1: Expelled from feeders");
     }
 
     public void openOracleToPublic(){
@@ -267,7 +227,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         require((lastUserSubmit.get(inactiveUser).add(TWO_DAYS)).compareTo(Block.timestramp()))
 
         oracleNormalFillers.put(inactiveUser, false);
-        validFeedinOracle.put(oracleNumber, validFeedinOracle - 1);
+        validFeedinOracle =  validFeedinOracle - 1;
         Msg.sender().tranfer(INACTIVE_PAYOUT);
     }
 
