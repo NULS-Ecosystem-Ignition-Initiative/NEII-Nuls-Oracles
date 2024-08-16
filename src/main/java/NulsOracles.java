@@ -18,11 +18,31 @@ import static io.nuls.contract.sdk.Utils.emit;
 import static io.nuls.contract.sdk.Utils.require;
 
 /**
-* @notice Nuls Contract that locks the nuls deposited, returns
-* yield to a project during an x period of time and
-* returns nuls locked in the end of the period
+* @notice Nuls Contract that feeds price info into contracts
+*           that need off chain prices
 *
-* @dev Nuls are deposited in AINULS in order to receive yield
+* @dev Each oracle can only feed one price,
+ *     in the beggining only seeder fillers can
+ *     change the oracle price and those are submited in the beggining
+ *     when the oracle is created, only when the oracle is open
+ *     that other feeders can enter.
+ *     The approval of a new price must be done when prices change
+ *     at least 1% up or down so anyone who implements this oracle
+ *     needs to account for a potential 1% discrepancy or when the
+ *     last update was made over 1 hour ago.
+ *     Note: This discrepancy can be even higher in moments of high volatily
+ *            so take into consideration at least 10% discrepancy in very rare cases
+ *    To reach consensus in the price a feeder creates a challenger proposal.
+ *    And the other valid feeders can either approve or reject, if
+ *    they reject a yellow card is given to challengeOwner and all
+ *    that approved. If a challenger is accepcted who rejected receives
+ *    a yellow card
+ *    If a feeder receives more than 5 yellow cards is expelled forever
+ *    New feeders can open a request that takes two days to be approved
+ *    Only less than half or half new feeders can enter the oracle every two days cicle
+ *       to prevent cordinated attacks
+ *
+ *       Min nuls recommended to open a oracle and submit info is 5k NULS
 *
 * Developed by Pedro G. S. Ferreira @Pedro_Ferreir_a
 * */
@@ -31,19 +51,19 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     /** 100 NULS
      *   @dev Min required to deposit in aiNULS is 100 NULS
      */
-    private static final BigInteger ONE_NULS     = BigInteger.valueOf(100000000L);
-    private static final BigInteger FIVEPER_NULS     = BigInteger.valueOf(50000000L);
-    private static final BigInteger TWO          = BigInteger.valueOf(2);
-    private static final BigInteger FEE_NULS     = BigInteger.valueOf(10000000L);
-    private static final BigInteger SLASH_FEE    = BigInteger.valueOf(1000000000L);
-    private static final BigInteger BASIS_POINTS = BigInteger.valueOf(10000);
-    private static final BigInteger ONE_HOUR     = BigInteger.valueOf(60 * 60);
-    private static final BigInteger RAT_OUT_PAYOUT  = BigInteger.valueOf(500000000L);
-    private static final BigInteger INACTIVE_PAYOUT  = BigInteger.valueOf(10000000L);
+    private static final BigInteger ONE_NULS        = BigInteger.valueOf(100000000L); // 1 NULS
+    private static final BigInteger FIVEPER_NULS    = BigInteger.valueOf(5000000L);   // 0.05 NULS
+    private static final BigInteger TWO             = BigInteger.valueOf(2);          // 2
+    private static final BigInteger FEE_NULS        = BigInteger.valueOf(10000000L);  // 0.1 NULS
+    private static final BigInteger SLASH_FEE       = BigInteger.valueOf(1000000000L);// 10 NULS
+    private static final BigInteger BASIS_POINTS    = BigInteger.valueOf(10000);      // 10.000
+    private static final BigInteger ONE_HOUR        = BigInteger.valueOf(60 * 60);    // 1 hour
+    private static final BigInteger RAT_OUT_PAYOUT  = BigInteger.valueOf(500000000L); // 5 NULS
+    private static final BigInteger INACTIVE_PAYOUT = BigInteger.valueOf(10000000L);  // 0.1 NULS
+    private static final BigInteger TWO_DAYS        = BigInteger.valueOf(60 * 60 * 24 * 2); // 2 days
 
     public Address token; // Project Token
     private BigInteger tokenTotalSupply;
-
     public Boolean paused;
 
     public BigInteger minNULSForFeeder;
@@ -52,33 +72,32 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     public BigInteger priceForFeederValid;
     public BigInteger penaltiesLeftOver; //penalties charged for fillers non compliant
     public Address treasury;
+    public Map<Address; Boolean> projectAdmin = new HashMap<>();
 
     public Integer oracleCounter;
 
-    //User Balance
-    public Map<Address, BigInteger> userBalance        = new HashMap<>(); // Amount deposited to check if can fill oracle needs
-    public BigInteger oracle; //price of asset
-    public BigInteger challenger; // Challenger price to current
-    public Address challengerOwner; // Challenger price to current
-    public Integer challengerApprovs      ; // Challenger price to current
-    public Integer challengerRejects    ; // Challenger price to current
-    public Boolean onlySeeders           = new ArrayList<>(); // If true only seeders can submit
-    public BigInteger oracleLastUpdated  ; // When was the last oracle update
-    public Integer validFeedinOracle; // number of approved feeders
-    public Map<Address, BigInteger> minValidationsToSubmit       = new HashMap<>(); // Min Valids that a feeder must submit to info be considered reliable
 
-    public  Map<Address, Long> firstSubmissionToOracle    = new HashMap<>(); // Min Valids that a feeder must submit to info be considered reliable
+    public BigInteger oracle;           //price of asset
+    public BigInteger oracleLastUpdated;// When was the last oracle update
+    public BigInteger challenger;       // Challenger price to current
 
+    public Address challengerOwner;     // Challenger price to current
+    public Integer challengerApprovs;   // Challenger price to current
+    public Integer challengerRejects;   // Challenger price to current
+    public Integer validFeedinOracle;   // number of approved feeders
+    public int pendingNewFeeders;
 
-    public Map<Address, Integer> yellowCard       = new HashMap<>(); // Min Valids that a feeder must submit to info be considered reliable
+   //User Balance
+    public Map<Address, BigInteger> userBalance             = new HashMap<>(); // Amount deposited to check if can fill oracle needs
+    public Map<Address, BigInteger> minValidationsToSubmit  = new HashMap<>(); // Min Valids that a feeder must submit to info be considered reliable
+    public Map<Address, Long> firstSubmissionToOracle       = new HashMap<>(); // Feeders must wait 2 days until they submit info, this stores the submission request
+    public Map<Address, Integer> yellowCard                 = new HashMap<>(); // User yellow cards
+    public Map<Address, Long> lastUserSubmit                = new HashMap<>(); // Min Valids that a feeder must submit to info be considered reliable
+    public Map<Address, Boolean> oracleSeedFillers          = new HashMap<>(); // check if is seed in oracle
+    public Map<Address, Boolean> oracleNormalFillers        = new HashMap<>(); // check if is seed in oracle
 
-    public Map<Address, Long> lastUserSubmit       = new HashMap<>(); // Min Valids that a feeder must submit to info be considered reliable
-
-    public  Map<Address, Boolean> admins = new HashMap<>();
-    public  Map<Address, Boolean> oracleSeedFillers; // check if is seed in oracle
-    public Map<Address, Boolean> oracleNormalFillers; // check if is seed in oracle
-    public Map<Integer, Map<Address, Boolean>> currentSubmission; //results of the challenge
-
+    public Map<Integer, Map<Address, Boolean>> currentSubmission = new HashMap<>();; //results of the challenge
+    public Boolean onlySeeders  = new ArrayList<>(); // If true only seeders can submit
 
     public int challengerCounter;
     public Map<Integer, Boolean> challengerResult        = new HashMap<>(); // Amount deposited to check if can fill oracle needs
@@ -97,20 +116,20 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         // Min nuls to submit info needs to pay the yellow card payments
         require(minNULSForFeeder_.compareTo(RAT_OUT_PAYOUT * 5), "");
 
-        admins.put(admin_, true);
-        paused = false;
-        minNULSForFeeder = minNULSForFeeder_;
-        pricePerRead = pricePerRead_;
-        token = token_;
-        minValids = minValids_;
+        projectAdmin.put(admin_, true);
+        paused              = false;
+        minNULSForFeeder    = minNULSForFeeder_;
+        pricePerRead        = pricePerRead_;
+        token               = token_;
+        minValids           = minValids_;
         priceForFeederValid = priceForFeederValid_;
-        treasury = treasury_;
-        penaltiesLeftOver = BigInteger.ZERO;
+        treasury            = treasury_;
+        penaltiesLeftOver   = BigInteger.ZERO;
+        tokenTotalSupply    = new BigInteger(token.callWithReturnValue("totalSupply", "", null, BigInteger.ZERO));
 
-        tokenTotalSupply = new BigInteger(token.callWithReturnValue("totalSupply", "", null, BigInteger.ZERO));
-
-        challengerCounter = 0;
-        oracleCounter = 0;
+        challengerCounter   = 0;
+        oracleCounter       = 0;
+        pendingNewFeeders   = 0;
     }
 
     /** VIEW FUNCTIONS */
@@ -173,12 +192,16 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
     /** MODIFIER FUNCTIONS */
 
+    /***
+     * Require that
+     *
+     * */
     protected void onlyAdmin(){
         require(projectAdmin.get(Msg.sender()) != null && projectAdmin.get(Msg.sender()), "Invalid Admin");
     }
 
     protected void notPaused(){
-        require(!paused, "");
+        require(!paused, "Contract is paused");
     }
 
 
@@ -198,17 +221,26 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     @Payable
     public void enterNewFeeder(){
 
+        // New Feeder needs already a deposit
+        onlyIfFeederHasDeposit(Msg.sender());
+
+        require(pendingNewFeeders < validFeedinOracle / 2, "Only allow less than half of approved for every cicle");
         require(Msg.value().compareTo(RAT_OUT_PAYOUT.multiply(5)), "Pay for payouts");
-        firstSubmissionToOracle.put(Msg.sender(), true);
+        firstSubmissionToOracle.put(Msg.sender(), Block.timestamp());
+        pendingNewFeeders += 1;
+
     }
 
-    public void completeProcess(int oracleNumber, int seedersNumber){
+    public void completeProcess(int seedersNumber){
 
         require(firstSubmissionToOracle.get(Msg.sender()) != null, "Process is null");
-        require(firstSubmissionToOracle.get(Msg.sender) + TWO_DAYS < Block.tomestamp(), "Two days waiting period");
+        require(firstSubmissionToOracle.get(Msg.sender).add(TWO_DAYS) < Block.tomestamp(), "Two days waiting period");
 
+        //Prevent double submissions
+        firstSubmissionToOracle.put(Msg.sender(), null);
         validFeedinOracle += 1;
         oracleNormalFillers.put(Msg.sender(), true);
+        pendingNewFeeders -= 1;
     }
 
 
@@ -224,11 +256,42 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         Boolean b = oracleNormalFillers.get(inactiveUser);
         require(b != null && b, "Not feeder");
 
-        require((lastUserSubmit.get(inactiveUser).add(TWO_DAYS)).compareTo(Block.timestramp()))
+        require((lastUserSubmit.get(inactiveUser).add(TWO_DAYS)).compareTo(BigInteger.valueOf(Block.timestramp())), "User is active");
 
         oracleNormalFillers.put(inactiveUser, false);
         validFeedinOracle =  validFeedinOracle - 1;
         Msg.sender().tranfer(INACTIVE_PAYOUT);
+
+
+
+
+    }
+
+    private void approveChallenger(){
+        // Check if there is a pending approve or reject
+        if(challengerApprovs >= (validFeedinOracle / 2 + 1)){
+
+            oracle            = challenger;
+            oracleLastUpdated =  BigInteger.valueOf(Block.timestamp());
+            challengerApprovs = 0;
+            challengerRejects = 0;
+            challenger        = null;
+            challengerResult.put(challengerCounter++, true);
+
+        }
+
+    }
+
+    private void rejectChallenger(){
+        if(challengerRejects >= (validFeedinOracle / 2 + 1)){
+
+            increaseUserYellowCards(challengerOwner);
+
+            challengerApprovs = 0;
+            challengerRejects = 0;
+            challenger = null;
+            challengerResult.put(challengerCounter++, false);
+        }
     }
 
     /**
@@ -289,46 +352,31 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         onlyIfValidYellowCards(Msg.sender());
 
         // Either a seeder or feeder must be a contract
-        require((oracleSeedFillers.get(Msg.sender()) != null && oracleSeedFillers.get(Msg.sender()) || Msg.sender().isContract(), "Feeder is seeder or contract");
+        require((oracleSeedFillers.get(Msg.sender()) != null && oracleSeedFillers.get(Msg.sender())
+                ||  (Msg.sender().isContract() && oracleNormalFillers.get(Msg.sender()), "Feeder is seeder or contract");
 
         // Challenger must exist
         require(challenger != null, "Challenge not created");
 
         if(feedbackPrice){
 
-            challengerApprovs = challengerApprovs  + 1;
+            challengerApprovs += 1;
 
-            if(challengerApprovs >= (validFeedinOracle / 2 + 1)){
+            approveChallenger();
 
-                oracle            = challenger;
-                oracleLastUpdated =  BigInteger.valueOf(Block.timestamp());
-                challengerApprovs = 0;
-                challengerRejects = 0;
-                challenger        = null;
-                challengerResult.put(challengerCounter, true);
-
-            }
         }else{
-                challengerRejects += 1;
-                if(challengerRejects >= validFeedinOracle / 2 + 1)){
 
-                    increaseUserYellowCards(challengerOwner);
+            challengerRejects += 1;
 
-                    challengerApprovs = 0;
-                    challengerRejects = 0;
-                    challenger = null;
-                    challengerResult.put(challengerCounter, false);
-                }
-
-
-            }
+            rejectChallenger();
+        }
 
         // Check to prevent withdraws until 2 daus after price submit
-            lastUserSubmit.put(Msg.sender(), Block.timestamp());
+        lastUserSubmit.put(Msg.sender(), Block.timestamp());
 
-            Map<Address, Boolean>> c;
-            c.put(Msg.sender(), feedbackPrice);
-            currentSubmission.put(challengerCounter, c);
+        Map<Address, Boolean>> c;
+        c.put(Msg.sender(), feedbackPrice);
+        currentSubmission.put(challengerCounter, c);
 
 
     }
@@ -336,15 +384,17 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
 
     private void increaseUserYellowCards(Address user){
-            int yellowCards = yellowCard.get(user);
-            yellowCards = (yellowCards != null) ? yellowCards : 0;
-            yellowCard.put(user, yellowCards + 1);
 
-            int validN = validFeedinOracle;
+        int yellowCards = yellowCard.get(user);
 
-            if(yellowCards + 1 > 5 && validN > 1){
-                validFeedinOracle = validN - 1;
-            }
+        yellowCards = (yellowCards != null) ? yellowCards : 0;
+        yellowCard.put(user, yellowCards + 1);
+
+        int validN = validFeedinOracle;
+
+        if(yellowCards + 1 > 5 && validN > 1){
+            validFeedinOracle = validN - 1;
+        }
     }
 
     /**
@@ -352,7 +402,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
      *
      * */
     @Payable
-    public void submitOracleInfo(@Required BigInteger oracleNumber, BigInteger newPrice) {
+    public void submitOracleInfo(@RequiredBigInteger newPrice) {
 
         //Prevent Reentrancy Attacks
         setEntrance();
@@ -366,64 +416,48 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
         if(onlySeeders){
 
+            //Require that feeder is seeder and there isn't a challenger active
             require(oracleSeedFillers.get(Msg.sender()), "Not Seeder");
             require(challenger == null, "Price in appreciation");
 
-
+            // Variations of 1% up and down
             BigInteger allow1perDeltaPos = oracle.get(oracleNumber).multiply(BASIS_POINTS).divide(10100);
             BigInteger allow1perDeltaNeg = oracle.get(oracleNumber).multiply(BASIS_POINTS).divide(9900);
+
+            // Require that last update was over 1 hour ago or price varation was higher than 1%
             require((oracleLastUpdated.get(oracleNumber).add(ONE_HOUR)).compareTo(Block.timestamp()) >=0
                     || (newPrice.compareTo(allow1perDeltaPos) > 0 && newPrice.compareTo(allow1perDeltaNeg)) < 0
                     , "Too soon");
 
-            challenger =  newPrice;
-            challengeOwner = Msg.sender();
-            challengerApprovs = 1;
-            lastUserSubmit.put(Msg.sender(), Block.timestamp());
+            // Create new challenger, update challenge data and update last user submission
+            challenger          =  newPrice;
+            challengeOwner      = Msg.sender();
+            challengerApprovs   = 1;
+
 
         }else {
 
-            BigInteger userValids = minValidationsToSubmit.get(Msg.sender());
+            // verify that feeder is normal or seeder and that there is no challenger
+            require(oracleNormalFillers.get(Msg.sender()) || oracleSeedFillers.get(Msg.sender()), "Not Seeder");
+            require(challenger == null, "Price in appreciation");
 
-            if (userValids != null
-                    && minValids.compareTo(userValids) > 0) {
+            // Variations of 1% up and down
+            BigInteger allow1perDeltaPos = oracle.get(oracleNumber).multiply(BASIS_POINTS).divide(10100);
+            BigInteger allow1perDeltaNeg = oracle.get(oracleNumber).multiply(BASIS_POINTS).divide(9900);
 
-                safeTransferFrom(token, Msg.sender(), Msg.address(), priceForFeederValid);
+            // Require that last update was over 1 hour ago or price varation was higher than 1%
+            require((oracleLastUpdated.get(oracleNumber).add(ONE_HOUR)).compareTo(Block.timestamp()) >=0
+                            || (newPrice.compareTo(allow1perDeltaPos) > 0 && newPrice.compareTo(allow1perDeltaNeg)) < 0
+                    , "Too soon");
 
-                require(Msg.value().compareTo(FEE_NULS) >= 0, "NulsOracleV1: Noobs Must Pay");
+            // Create new challenger, update challenge data and update last user submission
+            challenger          =  newPrice;
+            challengeOwner      = Msg.sender();
+            challengerApprovs   = 1;
 
-                treasury.transfer(FEE_NULS);
-
-                minValidationsToSubmit.put(Msg.sender(), userValids.add(BigInteger.ONE));
-                if (minValids.compareTo(userValids) == 0)
-                    validFeedinOracle += 1;
-            } else if (minValids.compareTo(userValids) <= 0) {
-
-                BigInteger price = oracle;
-
-                if (challenger == null) {
-                    challenger = newPrice;
-                    challengerApprovs = 1;
-                } else {
-
-
-                    // see if it is between 1% and
-                    BigInteger allow1perDeltaPos = newPrice.multiply(BASIS_POINTS).divide(10100);
-                    BigInteger allow1perDeltaNeg = newPrice.multiply(BASIS_POINTS).divide(9900);
-                    if (challenger.compareTo(allow1perDeltaPos) <= 0 && challenger.compareTo(allow1perDeltaNeg) >= 0) {
-                        challengerApprovs +=1;
-
-                        if(validFeedinOracle)
-                            oracleLastUpdated =  BigInteger.valueOf(Block.timestamo());
-                    }
-                }
-
-            } else {
-                minValidationsToSubmit.put(Msg.sender(), BigInteger.ONE);
-            }
         }
 
-
+        lastUserSubmit.put(Msg.sender(), Block.timestamp());
 
         setClosure();
 
@@ -433,6 +467,9 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
     @Payable
     public String readInfo(@Required BigInteger oracleNumber) {
+
+        // revert all txs if this is paused, because pausing is only done in potential attacks
+        notPaused();
 
         require(Msg.value().compareTo(pricePerRead) >= 0, "NulsOraclesV1: You need to pay");
 
