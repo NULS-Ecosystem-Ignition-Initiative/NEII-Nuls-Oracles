@@ -58,10 +58,13 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     private static final BigInteger FEE_NULS        = BigInteger.valueOf(10000000L);  // 0.1 NULS
     private static final BigInteger SLASH_FEE       = BigInteger.valueOf(1000000000L);// 10 NULS
     private static final BigInteger BASIS_POINTS    = BigInteger.valueOf(10000);      // 10.000
+    private static final BigInteger BASIS_1PLUS     = BigInteger.valueOf(10100);      // 10.100
+    private static final BigInteger BASIS_1MINUS    = BigInteger.valueOf(9900);      // 9.900
     private static final BigInteger ONE_HOUR        = BigInteger.valueOf(60 * 60);    // 1 hour
     private static final BigInteger RAT_OUT_PAYOUT  = BigInteger.valueOf(500000000L); // 5 NULS
     private static final BigInteger INACTIVE_PAYOUT = BigInteger.valueOf(10000000L);  // 0.1 NULS
     private static final BigInteger TWO_DAYS        = BigInteger.valueOf(60 * 60 * 24 * 2); // 2 days
+    private static final long FIVE_DAYS       = 60 * 60 * 24 * 5; // 5 days
 
     public Address token; // Project Token
     private BigInteger tokenTotalSupply;
@@ -231,7 +234,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         onlyIfFeederHasDeposit(Msg.sender());
 
         require(pendingNewFeeders < validFeedinOracle / 2, "Only allow less than half of approved for every cicle");
-        require(Msg.value().compareTo(RAT_OUT_PAYOUT.multiply(FIVE)), "Pay for payouts");
+        require(Msg.value().compareTo(RAT_OUT_PAYOUT.multiply(FIVE)) >= 0, "Pay for payouts");
         firstSubmissionToOracle.put(Msg.sender(), BigInteger.valueOf(Block.timestamp()));
         pendingNewFeeders += 1;
 
@@ -240,7 +243,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     public void completeProcess(int seedersNumber){
 
         require(firstSubmissionToOracle.get(Msg.sender()) != null, "Process is null");
-        require((firstSubmissionToOracle.get(Msg.sender()).add(TWO_DAYS)).compareTo(Block.timestamp()) < 0, "Two days waiting period");
+        require((firstSubmissionToOracle.get(Msg.sender()).add(TWO_DAYS)).compareTo(Big>Integer.valueOf(Block.timestamp())) < 0, "Two days waiting period");
 
         //Prevent double submissions
         firstSubmissionToOracle.put(Msg.sender(), null);
@@ -262,11 +265,11 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         Boolean b = oracleNormalFillers.get(inactiveUser);
         require(b != null && b, "Not feeder");
 
-        require((lastUserSubmit.get(inactiveUser).add(TWO_DAYS)).compareTo(BigInteger.valueOf(Block.timestramp())), "User is active");
+        require((BigInteger.valueOf(lastUserSubmit.get(inactiveUser)).add(TWO_DAYS)).compareTo(BigInteger.valueOf(Block.timestamp())) <= 0, "User is active");
 
         oracleNormalFillers.put(inactiveUser, false);
         validFeedinOracle =  validFeedinOracle - 1;
-        Msg.sender().tranfer(INACTIVE_PAYOUT);
+        Msg.sender().transfer(INACTIVE_PAYOUT);
 
 
 
@@ -393,7 +396,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
         int yellowCards = yellowCard.get(user);
 
-        yellowCards = (yellowCards != null) ? yellowCards : 0;
+        yellowCards = (yellowCard.get(user) != null) ? yellowCards : 0;
         yellowCard.put(user, yellowCards + 1);
 
         int validN = validFeedinOracle;
@@ -427,17 +430,17 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
             require(challenger == null, "Price in appreciation");
 
             // Variations of 1% up and down
-            BigInteger allow1perDeltaPos = oracle.get(oracleNumber).multiply(BASIS_POINTS).divide(10100);
-            BigInteger allow1perDeltaNeg = oracle.get(oracleNumber).multiply(BASIS_POINTS).divide(9900);
+            BigInteger allow1perDeltaPos = oracle.multiply(BASIS_POINTS).divide(BASIS_1PLUS);
+            BigInteger allow1perDeltaNeg = oracle.multiply(BASIS_POINTS).divide(BASIS_1MINUS);
 
             // Require that last update was over 1 hour ago or price varation was higher than 1%
-            require((oracleLastUpdated.get(oracleNumber).add(ONE_HOUR)).compareTo(Block.timestamp()) >=0
-                    || (newPrice.compareTo(allow1perDeltaPos) > 0 && newPrice.compareTo(allow1perDeltaNeg)) < 0
+            require((oracleLastUpdated.add(ONE_HOUR)).compareTo(BigInteger.valueOf(Block.timestamp())) >=0
+                    || (newPrice.compareTo(allow1perDeltaPos) > 0 && newPrice.compareTo(allow1perDeltaNeg) < 0)
                     , "Too soon");
 
             // Create new challenger, update challenge data and update last user submission
             challenger          =  newPrice;
-            challengeOwner      = Msg.sender();
+            challengerOwner      = Msg.sender();
             challengerApprovs   = 1;
 
 
@@ -448,17 +451,17 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
             require(challenger == null, "Price in appreciation");
 
             // Variations of 1% up and down
-            BigInteger allow1perDeltaPos = oracle.get(oracleNumber).multiply(BASIS_POINTS).divide(10100);
-            BigInteger allow1perDeltaNeg = oracle.get(oracleNumber).multiply(BASIS_POINTS).divide(9900);
+            BigInteger allow1perDeltaPos = oracle.multiply(BASIS_POINTS).divide(BASIS_1PLUS);
+            BigInteger allow1perDeltaNeg = oracle.multiply(BASIS_POINTS).divide(BASIS_1MINUS);
 
             // Require that last update was over 1 hour ago or price varation was higher than 1%
-            require((oracleLastUpdated.get(oracleNumber).add(ONE_HOUR)).compareTo(Block.timestamp()) >=0
-                            || (newPrice.compareTo(allow1perDeltaPos) > 0 && newPrice.compareTo(allow1perDeltaNeg)) < 0
+            require((oracleLastUpdated.add(ONE_HOUR)).compareTo(BigInteger.valueOf(Block.timestamp())) >=0
+                            || (newPrice.compareTo(allow1perDeltaPos) > 0 && newPrice.compareTo(allow1perDeltaNeg) < 0)
                     , "Too soon");
 
             // Create new challenger, update challenge data and update last user submission
             challenger          =  newPrice;
-            challengeOwner      = Msg.sender();
+            challengerOwner      = Msg.sender();
             challengerApprovs   = 1;
 
         }
@@ -524,7 +527,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         //Only allow locks when not paused
         notPaused();
 
-        require(lastUserSubmit.get(Msg.sender()).compareTo(Block.timestamp()).add(TWO_DAYS), "");
+        require(lastUserSubmit.get(Msg.sender()) + FIVE_DAYS <= Block.timestamp() , "Only allow withdraw after 5 days");
 
         BigInteger amount = Msg.value();
 
@@ -549,13 +552,6 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
     }
 
-    public void addOracleFiller(int oracle, Address newFiller){
-        Map<Address, Boolean> a = new HashMap<>();
-
-        a.put(admin_, true);
-        oracleFillers.put(oracle, a);
-    }
-
     public void removeAdmin(Address removeAdmin){
 
         onlyAdmin();
@@ -569,7 +565,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
         onlyAdmin();
 
-        yellowCard.put(addd, 0);
+        yellowCard.put(addr, 0);
 
     }
 
@@ -604,12 +600,6 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
     //--------------------------------------------------------------------
     /** INTERNAL FUNCTIONS */
-
-    private BigInteger getBalAINULS(@Required Address owner){
-        String[][] args = new String[][]{new String[]{owner.toString()}};
-        BigInteger b = new BigInteger(depositCtr.callWithReturnValue("balanceOf", "", args, BigInteger.ZERO));
-        return b;
-    }
 
     private void safeTransfer(@Required Address token, @Required Address recipient, @Required BigInteger amount){
         String[][] argsM = new String[][]{new String[]{recipient.toString()}, new String[]{amount.toString()}};
