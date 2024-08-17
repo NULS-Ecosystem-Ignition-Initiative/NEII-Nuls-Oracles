@@ -1,6 +1,7 @@
 #NULS ORACLES DOCUMENTATION
 
-Each oracle can only feed one price,    in the beggining only seeder fillers can  change the oracle price and those are submited in the beggining  when the oracle is created, only when the oracle is open that other feeders can enter.    The approval of a new price must be done when prices change at least 1% up or down so anyone who implements this oracle needs to account for a potential 1% discrepancy or when the last update was made over 1 hour ago.
+Each oracle can only feed one price,    in the beggining only seeder fillers can  change the oracle price and those are submited in the beggining  when the oracle is created, only when the oracle is open that other feeders can enter.    
+The approval of a new price must be done when prices change at least 1% up or down so anyone who implements this oracle needs to account for a potential 1% discrepancy or when the last update was made over 1 hour ago.
     Note: This discrepancy can be even higher in moments of high volatily
              so take into consideration at least 10% discrepancy in very rare cases
    To reach consensus in the price a feeder creates a challenger proposal.
