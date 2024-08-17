@@ -18,10 +18,10 @@ import static io.nuls.contract.sdk.Utils.emit;
 import static io.nuls.contract.sdk.Utils.require;
 
 /**
-* @notice Nuls Contract that feeds price info into contracts
-*           that need off chain prices
-*
-* @dev Each oracle can only feed one price,
+ * @notice Nuls Contract that feeds price info into contracts
+ *           that need off chain prices
+ *
+ * @dev Each oracle can only feed one price,
  *     in the beggining only seeder fillers can
  *     change the oracle price and those are submited in the beggining
  *     when the oracle is created, only when the oracle is open
@@ -42,10 +42,18 @@ import static io.nuls.contract.sdk.Utils.require;
  *    Only less than half or half new feeders can enter the oracle every two days cicle
  *       to prevent cordinated attacks
  *
- *       Min nuls recommended to open a oracle and submit info is 5k NULS
-*
-* Developed by Pedro G. S. Ferreira @Pedro_Ferreir_a
-* */
+ *       Min nuls recommended to open a oracle and submit info
+ *       should be at least  NULS under threat / number of feeders + 1
+ *
+ *       HIGH RECOMMENDATION: If using this contract when in production
+ *                            and public, have at least 7 independent
+ *                            running feeders to require at least the need of
+ *                            7 malicious feeders to alter the price
+ *                            or briberies to the ones already running
+ *                            absolute min should be 5k NULS
+ *
+ *       Developed by Pedro G. S. Ferreira @Pedro_Ferreir_a
+ * */
 public class NulsOracles extends ReentrancyGuard implements Contract{
 
     /** 100 NULS
@@ -64,8 +72,9 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     private static final BigInteger RAT_OUT_PAYOUT  = BigInteger.valueOf(500000000L); // 5 NULS
     private static final BigInteger INACTIVE_PAYOUT = BigInteger.valueOf(10000000L);  // 0.1 NULS
     private static final BigInteger TWO_DAYS        = BigInteger.valueOf(60 * 60 * 24 * 2); // 2 days
-    private static final int TWO_DAYS_LONG        = 60 * 60 * 24 * 2; // 2 days
-    private static final long FIVE_DAYS       = 60 * 60 * 24 * 5; // 5 days
+    private static final int TWO_DAYS_LONG          = 60 * 60 * 24 * 2; // 2 days
+    private static final int THREE_DAYS_LONG        = 60 * 60 * 24 * 3; // 3 days
+    private static final long FIVE_DAYS             = 60 * 60 * 24 * 5; // 5 days
 
     public Address token; // Project Token
     private BigInteger tokenTotalSupply;
@@ -147,9 +156,9 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     /** VIEW FUNCTIONS */
 
     /**
-     * @notice Get aiNULS asset address
+     * @notice Get Oracle Project Token
      *
-     * @return aiNULS Token Contract Address
+     * @return oracle project Token Contract Address
      */
     @View
     public Address getOracleNulsoken() {
@@ -244,7 +253,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     public void completeProcess(int seedersNumber){
 
         require(firstSubmissionToOracle.get(Msg.sender()) != null, "Process is null");
-        require((firstSubmissionToOracle.get(Msg.sender()) + TWO_DAYS_LONG) < Block.timestamp() , "Two days waiting period");
+        require((firstSubmissionToOracle.get(Msg.sender()) + THREE_DAYS_LONG) < Block.timestamp() , "Two days waiting period");
 
         //Prevent double submissions
         firstSubmissionToOracle.put(Msg.sender(), null);
@@ -266,14 +275,11 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         Boolean b = oracleNormalFillers.get(inactiveUser);
         require(b != null && b, "Not feeder");
 
-        require((BigInteger.valueOf(lastUserSubmit.get(inactiveUser)).add(TWO_DAYS)).compareTo(BigInteger.valueOf(Block.timestamp())) <= 0, "User is active");
+        require(lastUserSubmit.get(inactiveUser) + TWO_DAYS_LONG <= Block.timestamp(), "User is active");
 
         oracleNormalFillers.put(inactiveUser, false);
         validFeedinOracle =  validFeedinOracle - 1;
         Msg.sender().transfer(INACTIVE_PAYOUT);
-
-
-
 
     }
 
@@ -392,7 +398,11 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     }
 
 
-
+    /**
+     * Increase feeder yellow cards and expell him if yellow cards are
+     * higher than 5.
+     *
+     * */
     private void increaseUserYellowCards(Address user){
 
         int yellowCards = yellowCard.get(user);
@@ -408,7 +418,8 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     }
 
     /**
-     * Deposit funds on Lock
+     * Submit challenger price that differs 1% from current price
+     * or current price was submit 1 hour ago or more
      *
      * */
     @Payable
@@ -474,9 +485,15 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     }
 
 
-
+    /**
+     * Read Info from oracle
+     *
+     * Pay 0.1 NULS - 0.05 distributed to oracle token holders
+     *              - 0.05 distributed to the oracle feeders
+     *
+     * */
     @Payable
-    public String readInfo(@Required BigInteger oracleNumber) {
+    public String readInfo() {
 
         // revert all txs if this is paused, because pausing is only done in potential attacks
         notPaused();
@@ -492,8 +509,9 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     }
 
     /**
-     * Deposit funds on Lock
+     * Deposit funds on Oracle
      *
+     * @dev required in order for be able to feed information
      * */
     @Payable
     public void depositOnBehalf() {
@@ -517,7 +535,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     }
 
     /**
-     * Deposit funds on Lock
+     * Withdraw funds from Oracle
      *
      * */
     public void withdraw() {
@@ -545,6 +563,10 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     //--------------------------------------------------------------------
     /** MUTABLE OWNER FUNCTIONS */
 
+    /**
+     * Add new Admin to Oracle
+     *
+     * */
     public void addAdmin(Address newAdmin){
 
         onlyAdmin();
@@ -553,6 +575,10 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
     }
 
+    /**
+     *
+     *
+     * */
     public void removeAdmin(Address removeAdmin){
 
         onlyAdmin();
@@ -562,6 +588,10 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
     }
 
+    /**
+     *
+     *
+     * */
     public void cleanYellowCards(Address addr){
 
         onlyAdmin();
