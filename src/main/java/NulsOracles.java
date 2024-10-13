@@ -59,47 +59,46 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     /** 100 NULS
      *   @dev Min required to deposit in aiNULS is 100 NULS
      */
-    private static final BigInteger ONE_NULS        = BigInteger.valueOf(100000000L); // 1 NULS
-    private static final BigInteger FIVEPER_NULS    = BigInteger.valueOf(5000000L);   // 0.05 NULS
-    private static final BigInteger TWO             = BigInteger.valueOf(2);          // 2
-    private static final BigInteger FIVE            = BigInteger.valueOf(5);          // 5
-    private static final BigInteger FEE_NULS        = BigInteger.valueOf(10000000L);  // 0.1 NULS
-    private static final BigInteger SLASH_FEE       = BigInteger.valueOf(1000000000L);// 10 NULS
-    private static final BigInteger BASIS_POINTS    = BigInteger.valueOf(10000);      // 10.000
-    private static final BigInteger BASIS_1PLUS     = BigInteger.valueOf(10100);      // 10.100
-    private static final BigInteger BASIS_1MINUS    = BigInteger.valueOf(9900);      // 9.900
-    private static final BigInteger ONE_HOUR        = BigInteger.valueOf(60 * 60);    // 1 hour
-    private static final BigInteger RAT_OUT_PAYOUT  = BigInteger.valueOf(500000000L); // 5 NULS
-    private static final BigInteger INACTIVE_PAYOUT = BigInteger.valueOf(10000000L);  // 0.1 NULS
+    private static final BigInteger ONE_NULS        = BigInteger.valueOf(100000000L);   // 1 NULS
+    private static final BigInteger FIVEPER_NULS    = BigInteger.valueOf(5000000L);     // 0.05 NULS
+    private static final BigInteger TWO             = BigInteger.valueOf(2);            // 2
+    private static final BigInteger FIVE            = BigInteger.valueOf(5);            // 5
+    private static final BigInteger FEE_NULS        = BigInteger.valueOf(10000000L);    // 0.1 NULS
+    private static final BigInteger SLASH_FEE       = BigInteger.valueOf(1000000000L);  // 10 NULS
+    private static final BigInteger BASIS_POINTS    = BigInteger.valueOf(10000);        // 10.000
+    private static final BigInteger BASIS_1PLUS     = BigInteger.valueOf(10100);        // 10.100
+    private static final BigInteger BASIS_1MINUS    = BigInteger.valueOf(9900);         // 9.900
+    private static final BigInteger ONE_HOUR        = BigInteger.valueOf(60 * 60);      // 1 hour
+    private static final BigInteger RAT_OUT_PAYOUT  = BigInteger.valueOf(500000000L);   // 5 NULS
+    private static final BigInteger INACTIVE_PAYOUT = BigInteger.valueOf(10000000L);    // 0.1 NULS
     private static final BigInteger TWO_DAYS        = BigInteger.valueOf(60 * 60 * 24 * 2); // 2 days
-    private static final int TWO_DAYS_LONG          = 60 * 60 * 24 * 2; // 2 days
-    private static final int THREE_DAYS_LONG        = 60 * 60 * 24 * 3; // 3 days
-    private static final long FIVE_DAYS             = 60 * 60 * 24 * 5; // 5 days
+    private static final int TWO_DAYS_LONG          = 60 * 60 * 24 * 2;                 // 2 days
+    private static final int THREE_DAYS_LONG        = 60 * 60 * 24 * 3;                 // 3 days
+    private static final long FIVE_DAYS             = 60 * 60 * 24 * 5;                 // 5 days
 
-    public Address token; // Project Token
-    private BigInteger tokenTotalSupply;
-    public Boolean paused;
+    public Address token;                   // Project Token
+    private BigInteger tokenTotalSupply;    // Token total supply
+    public Boolean paused;                  // Pause/Unpause Contract
 
-    public BigInteger minNULSForFeeder;
-    public BigInteger minValids; // Min number of submissions required for filling info in oracle
-    public BigInteger pricePerRead;
-    public BigInteger priceForFeederValid;
-    public BigInteger penaltiesLeftOver; //penalties charged for fillers non compliant
-    public Address treasury;
+    public BigInteger minNULSForFeeder;     // min Nuls for feeder be able to submit info
+    public BigInteger minValids;            // Min number of submissions required for filling info in oracle
+    public BigInteger pricePerRead;         // Cost per read of the oracle
+    public BigInteger priceForFeederValid;  //
+    public BigInteger penaltiesLeftOver;    //penalties charged for fillers non compliant
+    public Address treasury;                // Address that receives feeders revenue
+
     public Map<Address, Boolean> projectAdmin = new HashMap<>();
 
-    public Integer oracleCounter;
+    public BigInteger oracle;               //price of asset
+    public BigInteger oracleLastUpdated;    // When was the last oracle update
+    public BigInteger challenger;           // Challenger price to current
 
-
-    public BigInteger oracle;           //price of asset
-    public BigInteger oracleLastUpdated;// When was the last oracle update
-    public BigInteger challenger;       // Challenger price to current
-
-    public Address challengerOwner;     // Challenger price to current
-    public Integer challengerApprovs;   // Challenger price to current
-    public Integer challengerRejects;   // Challenger price to current
-    public Integer validFeedinOracle;   // number of approved feeders
-    public int pendingNewFeeders;
+    public Address challengerOwner;         // Challenger price to current
+    public Integer challengerApprovs;       // Challenger price to current
+    public Integer challengerRejects;       // Challenger price to current
+    public Integer validFeedinOracle;       // number of approved feeders
+    public int pendingNewFeeders;           // pending feeders to feed info
+    public Boolean onlySeeders;             // If true only seeders can submit
 
    //User Balance
     public Map<Address, BigInteger> userBalance             = new HashMap<>(); // Amount deposited to check if can fill oracle needs
@@ -110,8 +109,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     public Map<Address, Boolean> oracleSeedFillers          = new HashMap<>(); // check if is seed in oracle
     public Map<Address, Boolean> oracleNormalFillers        = new HashMap<>(); // check if is seed in oracle
 
-    public Map<Integer, Map<Address, Boolean>> currentSubmission = new HashMap<>();; //results of the challenge
-    public Boolean onlySeeders; // If true only seeders can submit
+    public Map<Integer, Map<Address, Boolean>> currentSubmission = new HashMap<>(); //results of the challenge
 
     public int challengerCounter;
     public Map<Integer, Boolean> challengerResult        = new HashMap<>(); // Amount deposited to check if can fill oracle needs
@@ -119,7 +117,6 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
     //--------------------------------------------------------------------
     //Initialize Contract
     public NulsOracles(@Required BigInteger pricePerRead_,
-                       @Required BigInteger priceForFeederValid_,
                        @Required BigInteger minNULSForFeeder_,
                        @Required BigInteger minValids_,
                        @Required Address token_,
@@ -140,17 +137,18 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         pricePerRead        = pricePerRead_;
         token               = token_;
         minValids           = minValids_;
-        priceForFeederValid = priceForFeederValid_;
         treasury            = treasury_;
         penaltiesLeftOver   = BigInteger.ZERO;
         tokenTotalSupply    = new BigInteger(token.callWithReturnValue("totalSupply", "", null, BigInteger.ZERO));
 
         challengerCounter   = 0;
-        oracleCounter       = 0;
         pendingNewFeeders   = 0;
 
-        for(int i = 0; i < seeders_.length; i++)
+        for(int i = 0; i < seeders_.length; i++) {
+            require(!oracleSeedFillers.get(new Address(seeders_[i])), "Duplicated seed filler");
             oracleSeedFillers.put(new Address(seeders_[i]), true);
+
+        }
     }
 
     /** VIEW FUNCTIONS */
@@ -177,6 +175,14 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
             return false;
         }
         return projectAdmin.get(admin);
+    }
+
+    @View
+    public BigInteger getChallengerPrice() {
+        if(challenger != null){
+            return challenger;
+        }
+        return BigInteger.ZERO;
     }
 
     /**
@@ -250,6 +256,15 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
     }
 
+    /**
+     * Complete process to be a feeder
+     *
+     * @dev Requires a 3 days waiting period to prevent flash loan
+     *      attacks where user borrows high amount of funds
+     *      and opens feeders to feed wrong prices to gain
+     *      control of assets depending on this oracle
+     *
+     * */
     public void completeProcess(int seedersNumber){
 
         require(firstSubmissionToOracle.get(Msg.sender()) != null, "Process is null");
@@ -356,7 +371,7 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
 
 
 
-    public void submitOracleInfo(@Required Boolean feedbackPrice) {
+    public void submitOracleInfoCheck(@Required Boolean feedbackPrice) {
 
         //Only allow submissions when not paused
         notPaused();
@@ -431,8 +446,10 @@ public class NulsOracles extends ReentrancyGuard implements Contract{
         //Only allow locks when not paused
         notPaused();
 
+        //Require that feeder has made a deposit
         onlyIfFeederHasDeposit(Msg.sender());
 
+        //Only accepted non expelled feeders
         onlyIfValidYellowCards(Msg.sender());
 
         if(onlySeeders){
